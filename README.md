@@ -1,6 +1,6 @@
 # Problem Description
 
-**Task.** Final exam scheduling for a large university over a 7–9 day exam window with three daily slots (e.g., 9am, 2pm, 7pm). The goal is to assign each exam to **exactly one** time slot while minimizing student burden and operational risk.
+**Task.** Final exam scheduling for a large university over a 7�? day exam window with three daily slots (e.g., 9am, 2pm, 7pm). The goal is to assign each exam to **exactly one** time slot while minimizing student burden and operational risk.
 
 **Inputs.**
 - **Exam list** with section enrollments (exam sizes).
@@ -9,7 +9,7 @@
 - (Optional) **Policy levers/constraints** provided by the registrar (e.g., *front-load large exams*, upper bounds on specific slots).  
   *Room assignments are handled separately by the registrar and are not modeled here.*
 
-**Undesirable events (metrics).** We quantify schedule “discomfort” by counting:
+**Undesirable events (metrics).** We quantify schedule “discomfort�?by counting:
 - **Direct conflicts:** a student has two exams at the same time.
 - **Back-to-back (B2B):** a student has exams in consecutive slots.
 - **Two-in-24hr (2-in-24):** a student has two exams within any three consecutive slots.
@@ -100,13 +100,13 @@ Use the table below to record how long the block assignment generator takes for 
 time python block_assign/block_assign_generator.py --seed 42 --size 200 --optimize
 ```
 
-| Size  | Runtime (s) | Category |
-| :--:  | :---------: | :------: |
-|  200  |    438      | easy     |
-|  300  |    523      | easy     |
-|  400  |    2207     | medium   |
-|  500  |    10829    | hard     |
-|  600  |    32256    | hard     |
+| Size  | Runtime (s) | Category | # Var B | # Var I | # Var C | # Constr |
+| :--:  | :---------: | :------: | ------: | ------: | ------: | -------: |
+|  200  |    438      | easy     |   4800  |      0  |      0  |     200  |
+|  300  |    523      | easy     |   7200  |      0  |      0  |     300  |
+|  400  |    2207     | medium   |   9600  |      0  |      0  |     400  |
+|  500  |    10829    | hard     |  12000  |      0  |      0  |     500  |
+|  600  |    32256    | hard     |  14400  |      0  |      0  |     600  |
 
 
 
@@ -129,7 +129,7 @@ Run the simulation & optimization in one command:
 python block_seq/block_seq_generator.py [--seed SEED] [--slots SLOTS] [--size SIZE]
 ```
 
-* `<size>`: Number of (anonymous) courses to simulate (e.g. `300`). Increasing this increases the model size polynomially, so don't go above 1000 unless you have a lot of RAM.
+* `--size SIZE`: Number of (anonymous) courses to simulate (e.g. `300`). Increasing this increases the model size polynomially, so don't go above 1000 unless you have a lot of RAM.
 * `--seed SEED`: Random seed for reproducibility (default: `3`).
 * `--slots SLOTS`: Number of time slots (blocks) to use (default: `24`). This must be more than 24.
 
@@ -140,7 +140,7 @@ python block_seq/block_seq_generator.py [--seed SEED] [--slots SLOTS] [--size SI
 python block_seq/block_seq_generator.py --seed 42 --slots 10 --size 200
 ```
 
-Output LP is named `outputs/blockseq_n<size}_seed{seed}.lp`.
+Output LP is named `outputs/blockseq_n{SIZE}_slots{SLOTS}_seed{SEED}.lp`.
 
 Structure:
 
@@ -169,22 +169,23 @@ time python block_seq/block_seq_generator.py --seed 42 --slots 10 --size 200 --o
 ```
 
 
-| Size | Slots | Runtime (s) | Category |
-| ---- | ----- | ----------- | -------- |
-| 200  | 10    | 25          | easy     |
-| 400  | 10    | 54          | easy     |
-| 200  | 11    | 51          | easy     |
-| 400  | 11    | 267         | easy     |
-| 200  | 12    | 2384        | medium   |
-| 400  | 12    | 3001        | medium   |
-| 200  | 13    | 2102        | medium   |
+| Size | Slots | Runtime (s) | Category | # Var B | # Var I | # Var C | # Constr |
+| ---- | ----- | ----------- | -------- | ------: | ------: | ------: | -------: |
+<!-- | 200  | 10    | 25          | easy     |  21200  |    125  |      0  |   15565  | -->
+| 400  | 10    | 54          | easy     |  21200  |    125  |      0  |   15565  |
+<!-- | 200  | 11    | 51          | easy     |  -->
+| 400  | 11    | 267         | easy     |  30855  |    148  |      0  |   21972  |
+| 200  | 12    | 2384        | medium   |  43488  |    173  |      0  |   30173  |
+<!-- | 400  | 12    | 3001        | medium   |  43488  |    173  |      0  |   30173  | -->
+| 200  | 13    | 2102        | medium   |  59657  |    200  |      0  |   40474  |
+<!-- | 200  | 13    | 2102        | medium   |
 | 400  | 13    | 1824        | medium   |
-| 200  | 14    | 2950        | medium   |
-| 400  | 14    | 5322        | hard     |
-| 200  | 15    | 10651       | hard     |
-| 400  | 15    | 5+ hours    | hard     |
-| 200  | 20    | 5+ hours    | hard     |
-| 400  | 20    | 5+ hours    | hard     |
+| 200  | 14    | 2950        | medium   | -->
+| 400  | 14    | 5322        | hard     |  79968  |    229  |      0  |   53205  |
+| 200  | 15    | 10651       | hard     | 105075  |    260  |      0  |   68720  |
+<!-- | 400  | 15    | 5+ hours    | very hard     | -->
+| 200  | 20    | 5+ hours    | very hard| 328800  |    445  |      0  |  202125  |
+| 400  | 20    | 5+ hours    | very hard| 328800  |    445  |      0  |  202125  |
 
 
 

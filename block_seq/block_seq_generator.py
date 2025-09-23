@@ -342,7 +342,7 @@ def scheduling_IP(
     m.update()
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = (
-        OUTPUTS_DIR / f"blockseq_n{num_courses}_seed{random_seed}.lp"
+        OUTPUTS_DIR / f"blockseq_n{num_courses}_slots{len(blocks)}_seed{random_seed}.lp"
     )
     m.write(str(out_path))
     if read:
@@ -351,6 +351,30 @@ def scheduling_IP(
         m.optimize()
 
     # no return; builder just writes the LP
+    # Record model statistics (variable/constraint counts)
+    try:
+        m.update()
+        total_vars = int(m.NumVars)
+        bin_vars = int(m.NumBinVars)
+        # Some Gurobi versions include binary vars in NumIntVars — subtract them
+        gen_int_vars = max(int(m.NumIntVars) - bin_vars, 0)
+        cont_vars = max(total_vars - bin_vars - gen_int_vars, 0)
+        mip_stats = {
+            "generator": "block_seq",
+            "size": int(num_courses) if num_courses is not None else None,
+            "seed": int(random_seed) if random_seed is not None else None,
+            "slots": int(len(blocks)),
+            "var_bin": bin_vars,
+            "var_int": gen_int_vars,
+            "var_cont": cont_vars,
+            "constraints": int(m.NumConstrs),
+        }
+        stats_path = OUTPUTS_DIR / "stats.csv"
+        header = not stats_path.exists()
+        pd.DataFrame([mip_stats]).to_csv(stats_path, mode="a", header=header, index=False)
+        print(f"Model stats ⇒ {mip_stats}")
+    except Exception as e:
+        print(f"Warning: unable to record model stats: {e}")
     return None
 
 

@@ -107,6 +107,30 @@ def run_simulation(size, seed=3, optimize=False):
     model.write(str(out_path))
     print(f"Done. LP ⇒ {out_path}, stats: {stats}")
 
+    # Record model statistics (variable/constraint counts)
+    try:
+        model.update()
+        total_vars = int(model.NumVars)
+        bin_vars = int(model.NumBinVars)
+        # Some Gurobi versions include binary vars in NumIntVars — subtract them
+        gen_int_vars = max(int(model.NumIntVars) - bin_vars, 0)
+        cont_vars = max(total_vars - bin_vars - gen_int_vars, 0)
+        mip_stats = {
+            "generator": "block_assign",
+            "size": int(size) if size is not None else None,
+            "seed": int(seed) if seed is not None else None,
+            "var_bin": bin_vars,
+            "var_int": gen_int_vars,
+            "var_cont": cont_vars,
+            "constraints": int(model.NumConstrs),
+        }
+        stats_path = OUTPUTS_DIR / "stats.csv"
+        header = not stats_path.exists()
+        pd.DataFrame([mip_stats]).to_csv(stats_path, mode="a", header=header, index=False)
+        print(f"Model stats ⇒ {mip_stats}")
+    except Exception as e:
+        print(f"Warning: unable to record model stats: {e}")
+
 
 def main():
     parser = argparse.ArgumentParser(__doc__)
