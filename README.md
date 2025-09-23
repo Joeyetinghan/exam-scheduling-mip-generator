@@ -1,6 +1,6 @@
 # Problem Description
 
-**Task.** Final exam scheduling for a large university over a 7�? day exam window with three daily slots (e.g., 9am, 2pm, 7pm). The goal is to assign each exam to **exactly one** time slot while minimizing student burden and operational risk.
+**Task.** Final exam scheduling for a large university over a 7–9 day exam window with three daily slots (e.g., 9am, 2pm, 7pm). The goal is to assign each exam to **exactly one** time slot while minimizing student burden and operational risk.
 
 **Inputs.**
 - **Exam list** with section enrollments (exam sizes).
@@ -9,7 +9,7 @@
 - (Optional) **Policy levers/constraints** provided by the registrar (e.g., *front-load large exams*, upper bounds on specific slots).  
   *Room assignments are handled separately by the registrar and are not modeled here.*
 
-**Undesirable events (metrics).** We quantify schedule “discomfort�?by counting:
+**Undesirable events (metrics).** We quantify schedule “discomfort” by counting:
 - **Direct conflicts:** a student has two exams at the same time.
 - **Back-to-back (B2B):** a student has exams in consecutive slots.
 - **Two-in-24hr (2-in-24):** a student has two exams within any three consecutive slots.
