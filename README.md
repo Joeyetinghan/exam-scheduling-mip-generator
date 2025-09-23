@@ -1,3 +1,44 @@
+# Problem Description
+
+**Task.** Final exam scheduling for a large university over a 7–9 day exam window with three daily slots (e.g., 9am, 2pm, 7pm). The goal is to assign each exam to **exactly one** time slot while minimizing student burden and operational risk.
+
+**Inputs.**
+- **Exam list** with section enrollments (exam sizes).
+- **Co-enrollment data** at the **pair** and **triplet** levels (number of students taking two/three exams together).
+- **Available time slots** (some slots may be excluded, e.g., Sat night, Sun morning).
+- (Optional) **Policy levers/constraints** provided by the registrar (e.g., *front-load large exams*, upper bounds on specific slots).  
+  *Room assignments are handled separately by the registrar and are not modeled here.*
+
+**Undesirable events (metrics).** We quantify schedule “discomfort” by counting:
+- **Direct conflicts:** a student has two exams at the same time.
+- **Back-to-back (B2B):** a student has exams in consecutive slots.
+- **Two-in-24hr (2-in-24):** a student has two exams within any three consecutive slots.
+- **Three-in-a-row (Triple):** a student has exams in three consecutive slots.
+- **Three-in-four (3-in-4):** a student has three exams within any four consecutive slots.  
+  (No double counting across metrics; e.g., pairs inside a Triple are not also counted as B2B/2-in-24.)
+
+**Objective.** Minimize a **weighted sum** of the above undesirable events, with higher priority typically given to eliminating **direct conflicts** and **triples**, while also reducing B2B, 2-in-24, and 3-in-4 where possible.
+
+**Hard constraints.**
+- Each exam is assigned to exactly one time slot.
+- Time slot availability and registrar exclusions are respected.
+- (Optional) **Front-loading**: exams exceeding a chosen enrollment threshold must be scheduled before a chosen early-slot cutoff.
+
+**Outputs.**
+- A mapping from exams to time slots.
+- Schedule-quality metrics for the five events above, plus summary distributions useful for registrar review and communication.
+
+**Modeling/Algorithms.**
+- **Group-then-Sequence (GtS):** (i) *Block Assignment* clusters exams to blocks by reducing direct conflicts; (ii) *Block Sequencing* assigns blocks to time slots to optimize the weighted metrics;
+
+**Data format in this repo.**
+- `inputs/anon_coenrol.csv`, `inputs/hist_totals.csv`, `inputs/anon24.csv`, `inputs/anon_t_co.csv` (see module READMEs below).
+- Generators produce `.lp` models for reproducibility and solver-side inspection.
+
+**Reference.**  
+This problem statement follows the formulation and evaluation in our paper:  
+*Cornell University Uses Integer Programming to Optimize Final Exam Scheduling* ([arXiv:2409.04959](https://arxiv.org/abs/2409.04959)). See §2 *Problem Description*, §4 *Modeling Approach*, and the **Appendix** for the full MIP formulations (variables, constraints, objectives, and parameter definitions).
+
 # block_assign (block assignment MIP instance)
 
 This module generates a block-assignment MIP instance (pairwise co-enrollment driven).
@@ -56,7 +97,7 @@ Done. LP ⇒ outputs/blockassign_n20_seed42.lp, stats: {
 Use the table below to record how long the block assignment generator takes for different `size` values. You can measure runtime in bash, e.g.:
 
 ```bash
-time python block_assign/block_assign_generator.py 50
+time python block_assign/block_assign_generator.py --seed 42 --size 200 --optimize
 ```
 
 | Size  | Runtime (s) | Category |
@@ -121,7 +162,12 @@ If you use this repository, please cite the following paper:
 Cornell University Uses Integer Programming to Optimize Final Exam Scheduling. Authors: Tinghan Ye, Adam Jovine, Willem van Osselaer, Qihan Zhu, David Shmoys. arXiv: [arXiv:2409.04959](https://arxiv.org/abs/2409.04959).
 
 ## Benchmark Table
-These are runs on a personal laptop using gurobipy and python 3.11. 
+These are runs on a personal laptop using gurobipy and python 3.11.  You can measure runtime in bash, e.g.:
+
+```bash
+time python block_seq/block_seq_generator.py --seed 42 --slots 10 --size 200 --optimize
+```
+
 
 | Size | Slots | Runtime (s) | Category |
 | ---- | ----- | ----------- | -------- |
