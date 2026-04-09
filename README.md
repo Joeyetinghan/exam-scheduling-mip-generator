@@ -1,184 +1,198 @@
-# Problem Description
+# Exam Scheduling MIP Generator
 
-**Task.** Final exam scheduling for a large university over a 7–9 day exam window with three daily slots (e.g., 9am, 2pm, 7pm). The goal is to assign each exam to **exactly one** time slot while minimizing student burden and operational risk.
+Open-source instance generators for the Cornell final exam scheduling models in:
 
-**Inputs.**
-- **Exam list** with section enrollments (exam sizes).
-- **Co-enrollment data** at the **pair** and **triplet** levels (number of students taking two/three exams together).
-- **Available time slots** (some slots may be excluded, e.g., Sat night, Sun morning).
-- (Optional) **Policy levers/constraints** provided by the registrar (e.g., *front-load large exams*, upper bounds on specific slots).  
-  *Room assignments are handled separately by the registrar and are not modeled here.*
-
-**Undesirable events (metrics).** We quantify schedule “discomfort” by counting:
-- **Direct conflicts:** a student has two exams at the same time.
-- **Back-to-back (B2B):** a student has exams in consecutive slots.
-- **Two-in-24hr (2-in-24):** a student has two exams within any three consecutive slots.
-- **Three-in-a-row (Triple):** a student has exams in three consecutive slots.
-- **Three-in-four (3-in-4):** a student has three exams within any four consecutive slots.  
-  (No double counting across metrics; e.g., pairs inside a Triple are not also counted as B2B/2-in-24.)
-
-**Objective.** Minimize a **weighted sum** of the above undesirable events, with higher priority typically given to eliminating **direct conflicts** and **triples**, while also reducing B2B, 2-in-24, and 3-in-4 where possible.
-
-**Hard constraints.**
-- Each exam is assigned to exactly one time slot.
-- Time slot availability and registrar exclusions are respected.
-- (Optional) **Front-loading**: exams exceeding a chosen enrollment threshold must be scheduled before a chosen early-slot cutoff.
-
-**Outputs.**
-- A mapping from exams to time slots.
-- Schedule-quality metrics for the five events above, plus summary distributions useful for registrar review and communication.
-
-**Modeling/Algorithms.**
-- **Group-then-Sequence (GtS):** (i) *Block Assignment* clusters exams to blocks by reducing direct conflicts; (ii) *Block Sequencing* assigns blocks to time slots to optimize the weighted metrics;
-
-**Data format in this repo.**
-- `inputs/anon_coenrol.csv`, `inputs/hist_totals.csv`, `inputs/anon24.csv`, `inputs/anon_t_co.csv` (see module READMEs below).
-- Generators produce `.lp` models for reproducibility and solver-side inspection.
-
-**Reference.**  
-This problem statement follows the formulation and evaluation in our paper:  
-*Cornell University Uses Integer Programming to Optimize Final Exam Scheduling* ([arXiv:2409.04959](https://arxiv.org/abs/2409.04959)). See §2 *Problem Description*, §4 *Modeling Approach*, and the **Appendix** for the full MIP formulations (variables, constraints, objectives, and parameter definitions).
-
-# block_assign (block assignment MIP instance)
-
-This module generates a block-assignment MIP instance (pairwise co-enrollment driven).
-
-## Prerequisites
-
-* Python 3.7+
-* `pandas`
-* `numpy`
-* `gurobipy` (with a valid license)
-
-## Installation
-
-```bash
-# (Optionally) create a virtual env
-python3 -m venv venv
-source venv/bin/activate
-
-# Install required packages
-pip install pandas numpy gurobipy
-```
-
-## Usage
-
-```bash
-python block_assign/block_assign_generator.py  [--seed SEED] [--size SIZE]
-```
-
-
-**Example:**
-```bash
-python block_assign/block_assign_generator.py --seed 42 --size 200
-```
-
-This will:
-
-1. Read `inputs/anon_coenrol.csv` & `inputs/hist_totals.csv`.
-2. Sample pairwise co-enrollments for the top-20 (or random extra) course IDs.
-3. Build and write the LP model to `outputs/blockassign_n20_seed42.lp` (with your chosen seed).
-4. Print a stats summary, e.g.:
-
-```
-Done. LP ⇒ outputs/blockassign_n20_seed42.lp, stats: {
-  "samples": 80,
-  "weighted": 56,
-  "random": 24,
-  "unique": 78,
-  "max": 5
+```bibtex
+@article{ye2025cornell,
+  title={Cornell university uses integer programming to optimize final exam scheduling},
+  author={Ye, Tinghan and Jovine, Adam S and Van Osselaer, Willem and Zhu, Qihan and Shmoys, David B},
+  journal={INFORMS Journal on Applied Analytics},
+  year={2025},
+  publisher={INFORMS}
 }
 ```
 
----
+The repo generates MIP instances for two stages:
 
-## Runtime Benchmark Table
+- `block_assign`: assign exams to blocks from pairwise co-enrollment data
+- `block_seq`: assign blocks to slots from block-level pair and triplet data
 
-Use the table below to record how long the block assignment generator takes for different `size` values. You can measure runtime in bash, e.g.:
+It also includes a synthetic data generator for larger instances.
 
-```bash
-time python block_assign/block_assign_generator.py --seed 42 --size 200 --optimize
+## Inputs
+
+Shared inputs live under `inputs/`:
+
+- `anon_coenrol.csv`: pairwise co-enrollment matrix
+- `anon_t_co.csv`: triplet co-enrollment data
+- `exam_sizes.csv`: exam enrollments
+- `generated/`: cached synthetic bundles created on demand
+
+If `--size` exceeds the available exam count in the selected bundle, the repo generates and caches a synthetic bundle under:
+
+```text
+inputs/generated/synth_n{SIZE}_seed{SEED}/
 ```
 
-| Size  | Runtime (s) | Category | # Var B | # Var I | # Var C | # Constr |
-| :--:  | :---------: | :------: | ------: | ------: | ------: | -------: |
-|  200  |    438      | easy     |   4800  |      0  |      0  |     200  |
-|  300  |    523      | easy     |   7200  |      0  |      0  |     300  |
-|  400  |    2207     | medium   |   9600  |      0  |      0  |     400  |
-|  500  |    10829    | hard     |  12000  |      0  |      0  |     500  |
-|  600  |    32256    | hard     |  14400  |      0  |      0  |     600  |
+## Setup
 
+```bash
+conda env create -f environment.yml
+conda activate exam-sched
+```
 
+Gurobi must be available in the shell environment before running solver-backed commands.
 
+## block_assign
 
-## Files
+Generate a block-assignment LP directly from the pairwise matrix:
 
-Structure:
+```bash
+python block_assign/block_assign_generator.py [--size SIZE] [--seed SEED] [--inputs-dir INPUTS_DIR]
+```
 
+Example:
+
+```bash
+python block_assign/block_assign_generator.py --size 200 --seed 42
+```
+
+This writes:
+
+- `outputs/blockassign_n{SIZE}_seed{SEED}.lp`
+
+Benchmark table:
+
+| Size | Blocks | Runtime (s) | Gap (%) | Category  | # Var B | # Var I | # Var C | # Constr |
+| ---- | ------ | ----------- | ------- | --------- | ------: | ------: | ------: | -------: |
+| 200  | 24     | 100.94      | 0.00    | medium    |    4800 |       0 |       0 |      200 |
+| 300  | 24     | 324.24      | 0.00    | medium    |    7200 |       0 |       0 |      300 |
+| 400  | 24     | 706.09      | 0.00    | medium    |    9600 |       0 |       0 |      400 |
+| 500  | 24     | 995.88      | 0.00    | medium    |   12000 |       0 |       0 |      500 |
+| 600  | 24     | 3600 (time limit) | 100.00  | ext hard  |   14400 |       0 |       0 |      600 |
+| 700  | 24     | 3600 (time limit) | 100.00  | ext hard  |   16800 |       0 |       0 |      700 |
+
+## block_seq
+
+`block_seq` first constructs a real block assignment, then builds the sequencing MIP. It supports:
+
+- exact `--num-blocks`
+- exact `--num-slots`
+- optional front-loading
+- virtual blocks when `num_blocks < num_slots`
+
+Run the full sequencing generator with:
+
+```bash
+python block_seq/block_seq_generator.py \
+  [--num-blocks NUM_BLOCKS] \
+  [--num-slots NUM_SLOTS] \
+  [--size SIZE] \
+  [--seed SEED] \
+  [--inputs-dir INPUTS_DIR] \
+  [--no-frontload] \
+  [--frontload-block-size-cutoff CUTOFF] \
+  [--frontload-slot-cutoff SLOT_CUTOFF] \
+  [--optimize]
+```
+
+Example:
+
+```bash
+python block_seq/block_seq_generator.py \
+  --num-blocks 22 \
+  --num-slots 24 \
+  --size 200 \
+  --seed 42 \
+  --optimize
+```
+
+Defaults:
+
+- `--num-blocks 24`
+- `--num-slots 24`
+- `--seed 3`
+- front-loading enabled with:
+  - `--frontload-block-size-cutoff 300`
+  - `--frontload-slot-cutoff 21`
+
+For block-assignment-only preprocessing, run:
+
+```bash
+python block_seq/greedy_block_assignment.py [--num-blocks NUM_BLOCKS] [--size SIZE] [--seed SEED] [--inputs-dir INPUTS_DIR]
+```
+
+Each `block_seq` run writes an instance folder:
+
+```text
+block_seq/outputs/blockseq_n{N}_blocks{B}_slots{S}_seed{SEED}/
+```
+
+Contents:
+
+```text
+blockmap.csv
+block_summary.csv
+instance.json
+pair_counts.csv
+triplet_counts.csv
+model.lp
+slot_summary.csv   # only when --optimize is used
+```
+
+`instance.json` plus the pair/triplet CSVs are the minimal exported data needed to rebuild the sequencing MIP.
+
+Benchmark table:
+
+| Size | Blocks | Slots | Runtime (s) | Gap (%) | Category  | # Var B | # Var I | # Var C | # Constr |
+| ---- | ------ | ----- | ----------- | ------- | --------- | ------: | ------: | ------: | -------: |
+| 60   | 6      | 6     | 3.72        | 0.00    | easy      |    2808 |       0 |       0 |     2400 |
+| 80   | 7      | 7     | 16.00       | 0.00    | easy      |    5145 |       0 |       0 |     4144 |
+| 100  | 8      | 8     | 167.31      | 0.00    | medium    |    8704 |       0 |       0 |     6688 |
+| 150  | 10     | 10    | 3600 (time limit) | 14.35   | ext hard  |   21000 |       0 |       0 |    15040 |
+| 200  | 12     | 12    | 3600 (time limit) | 20.52   | ext hard  |   43200 |       0 |       0 |    29424 |
+| 250  | 14     | 14    | 3600 (time limit) | 21.70   | ext hard  |   79576 |       0 |       0 |    52192 |
+| 300  | 16     | 16    | 3600 (time limit) | 24.18   | ext hard  |  135168 |       0 |       0 |    86080 |
+| 350  | 18     | 18    | 3600 (time limit) | 29.41   | ext hard  |  215784 |       0 |       0 |   134208 |
+| 450  | 20     | 20    | 3600 (time limit) | 32.89   | ext hard  |  328000 |       0 |       0 |   200080 |
+| 550  | 22     | 22    | 3600 (time limit) | 33.47   | ext hard  |  479160 |       0 |       0 |   287584 |
+
+The `block_seq` benchmark runs used `--no-frontload`. The variable counts are unchanged with front-loading, but the listed constraint counts are exact for the no-frontload benchmark regime.
+
+Rows shown as `3600 (time limit)` reached the 1-hour solver limit; the gap column reports the final gap at that limit.
+
+Category labels are aligned to the Distributional MIPLIB hardness thresholds: solved under `100s` = `easy`, `100-1000s` = `medium`, solved over `1000s` = `hard`, and time-limited rows are labeled `very hard` or `ext hard` by final gap. Distributional MIPLIB defines these at the distribution level; here they are used as concise instance-level labels for the benchmark rows.
+
+## synthetic_dataset
+
+Generate a larger synthetic input bundle directly:
+
+```bash
+python synthetic_dataset.py --size SIZE --seed SEED [--inputs-dir INPUTS_DIR]
+```
+
+This writes:
+
+- `exam_sizes.csv`
+- `anon_coenrol.csv`
+- `anon_t_co.csv`
+- `metadata.json`
+
+## Benchmark Config
+
+The benchmark runs use:
+
+- 1 Gurobi thread
+- `--time-limit 3600`
+- `5G` memory by default
+- `15G` for the hard `block_assign` cases at sizes `600` and `700`
+
+## Repository Layout
+
+```text
 block_assign/
-- outputs/
-- block_assign_generator.py
-
-Note: `setup.py` and its data-generation pipeline were removed for open-sourcing. Bring your own anonymized CSVs listed above.
-
-# block_seq (block sequencing MIP instance)
-
-Run the simulation & optimization in one command:
-
-```bash
-python block_seq/block_seq_generator.py [--seed SEED] [--slots SLOTS] [--size SIZE]
-```
-
-* `--size SIZE`: Number of (anonymous) courses to simulate (e.g. `300`). Increasing this increases the model size polynomially, so don't go above 1000 unless you have a lot of RAM.
-* `--seed SEED`: Random seed for reproducibility (default: `3`).
-* `--slots SLOTS`: Number of time slots (blocks) to use (default: `24`). This must be more than 24.
-
-
-**Example:**
-
-```bash
-python block_seq/block_seq_generator.py --seed 42 --slots 10 --size 200
-```
-
-Output LP is named `outputs/blockseq_n{SIZE}_slots{SLOTS}_seed{SEED}.lp`.
-
-Structure:
-
 block_seq/
-- outputs/
-- block_seq_generator.py
-
-Root-level inputs/ directory (shared by both modules):
-
 inputs/
-- anon_coenrol.csv
-- hist_totals.csv
-- anon24.csv
-- anon_t_co.csv
-
-## Citation
-If you use this repository, please cite the following paper:
-
-Cornell University Uses Integer Programming to Optimize Final Exam Scheduling. Authors: Tinghan Ye, Adam Jovine, Willem van Osselaer, Qihan Zhu, David Shmoys. arXiv: [arXiv:2409.04959](https://arxiv.org/abs/2409.04959).
-
-## Benchmark Table
-These are runs on a personal laptop using gurobipy and python 3.11.  You can measure runtime in bash, e.g.:
-
-```bash
-time python block_seq/block_seq_generator.py --seed 42 --slots 10 --size 200 --optimize
+synthetic_dataset.py
+environment.yml
 ```
-
-
-| Size | Slots | Runtime (s) | Category | # Var B | # Var I | # Var C | # Constr |
-| ---- | ----- | ----------- | -------- | ------: | ------: | ------: | -------: |
-| 400  | 10    | 54          | easy     |  21200  |    125  |      0  |   15565  |
-| 400  | 11    | 267         | easy     |  30855  |    148  |      0  |   21972  |
-| 200  | 12    | 2384        | medium   |  43488  |    173  |      0  |   30173  |
-| 200  | 13    | 2102        | medium   |  59657  |    200  |      0  |   40474  |
-| 400  | 14    | 5322        | hard     |  79968  |    229  |      0  |   53205  |
-| 200  | 15    | 10651       | hard     | 105075  |    260  |      0  |   68720  |
-| 200  | 20    | 5+ hours    | very hard| 328800  |    445  |      0  |  202125  |
-| 400  | 20    | 5+ hours    | very hard| 328800  |    445  |      0  |  202125  |
-
-
-

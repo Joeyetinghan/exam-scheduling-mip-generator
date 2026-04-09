@@ -4,9 +4,11 @@ __pycache__/
 .venv/
 venv/
 .env
+.codex
 
 # Jupyter
 .ipynb_checkpoints/
+.pytest_cache/
 
 # macOS
 .DS_Store
@@ -15,4 +17,11 @@ venv/
 *.lp
 block_seq/outputs/
 block_assign/outputs/
+inputs/generated/
+logs/*
+!logs/.gitkeep
+!logs/benchmarks/
+logs/benchmarks/*
+!logs/benchmarks/.gitkeep
 
+slurm/

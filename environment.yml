@@ -1,0 +1,10 @@
+name: exam-sched
+channels:
+  - gurobi
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pandas
+  - numpy
+  - networkx
+  - gurobi=13.0.1
