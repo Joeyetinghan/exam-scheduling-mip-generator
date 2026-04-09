@@ -1,147 +1,176 @@
 import argparse
+import sys
 from pathlib import Path
-import random
-import numpy as np
-import pandas as pd
-from itertools import combinations
-from gurobipy import Env, Model, GRB, quicksum
+from typing import Optional
 
-# Paths
+import gurobipy as gp
+import pandas as pd
+from gurobipy import GRB
+
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent
 INPUTS_DIR = ROOT_DIR / "inputs"
 OUTPUTS_DIR = SCRIPT_DIR / "outputs"
+DEFAULT_SEED = 3
+DEFAULT_BLOCKS = 24
 
-ANON_FILE = INPUTS_DIR / "anon_coenrol.csv"
-HIST_TOTALS_FILE = INPUTS_DIR / "hist_totals.csv"
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-
-def pick_course_subset(n, total_courses):
-    """
-    Top-n are simply IDs 1…n. If n>total, append new IDs above total.
-    """
-    if n <= 0:
-        return []
-    if n <= total_courses:
-        return list(range(1, n + 1))
-    extra = n - total_courses
-    new_ids = list(range(total_courses + 1, total_courses + 1 + extra))
-    random.shuffle(new_ids)
-    return list(range(1, total_courses + 1)) + new_ids
+from synthetic_dataset import load_subset_pairwise_matrix, resolve_inputs_dir_for_size
 
 
-def simulate_future_semester(selected, m_samples, seed=None, rand_frac=0.3):
-    selected = list(dict.fromkeys(selected))
-    if seed is not None:
-        np.random.seed(seed)
-
-    pairs = list(combinations(selected, 2))
-    idx_map = {c: i for i, c in enumerate(selected)}
-    hist = pd.read_csv(HIST_TOTALS_FILE, index_col=["course1", "course2"]).iloc[:, 0]
-
-    weights = np.array([hist.get(p, 0) for p in pairs], float)
-    if weights.sum() > 0:
-        probs = weights / weights.sum()
-    else:
-        probs = np.full(len(pairs), 1 / len(pairs))
-
-    n_w = int(m_samples * (1 - rand_frac))
-    n_r = m_samples - n_w
-    w_idxs = np.random.choice(len(pairs), size=n_w, p=probs)
-    r_idxs = np.random.randint(0, len(pairs), size=n_r)
-
-    counts = np.bincount(np.concatenate([w_idxs, r_idxs]), minlength=len(pairs))
-    nz = np.nonzero(counts)[0]
-
-    # build symmetric matrix
-    n = len(selected)
-    M = np.zeros((n, n), int)
-    for i in nz:
-        c1, c2 = pairs[i]
-        cnt = counts[i]
-        a, b = idx_map[c1], idx_map[c2]
-        M[a, b] = M[b, a] = cnt
-
-    dfM = pd.DataFrame(M, index=selected, columns=selected)
-    stats = {
-        "samples": m_samples,
-        "weighted": n_w,
-        "random": n_r,
-        "unique": len(nz),
-        "max": int(counts.max()),
-    }
-    return dfM, stats
+def prepare_block_assignment_data(
+    size: Optional[int],
+    seed: int = DEFAULT_SEED,
+    inputs_dir: Path = INPUTS_DIR,
+) -> tuple[pd.DataFrame, Path]:
+    resolved_inputs_dir = resolve_inputs_dir_for_size(
+        inputs_dir=inputs_dir,
+        size=size,
+        seed=seed,
+    )
+    pair_df = load_subset_pairwise_matrix(resolved_inputs_dir, size=size)
+    return pair_df, resolved_inputs_dir
 
 
-def run_simulation(size, seed=3, optimize=False):
-    anon = pd.read_csv(ANON_FILE, index_col=0)
-    total = anon.shape[0]
-    subset = pick_course_subset(size, total)
-    m_samples = int(size * size / 5)
-    co, stats = simulate_future_semester(subset, m_samples, seed)
+def build_block_assignment_model(
+    pair_df: pd.DataFrame,
+    block_count: int = DEFAULT_BLOCKS,
+):
+    if block_count <= 0:
+        raise ValueError("block_count must be positive.")
 
-    exams = list(co.columns)
-    blocks = list(range(1, 25))
+    exams = [int(exam_id) for exam_id in pair_df.index]
+    blocks = list(range(1, block_count + 1))
 
-    # Use default Gurobi license discovery; credentials must come from environment or license file
-    env = Env()
-    model = Model(env=env)
-
+    model = gp.Model("BlockAssignment")
     x = model.addVars(exams, blocks, vtype=GRB.BINARY, name="x")
     model.addConstrs(
-        (quicksum(x[e, b] for b in blocks) == 1 for e in exams), name="assign_once"
+        (gp.quicksum(x[exam_id, block_id] for block_id in blocks) == 1 for exam_id in exams),
+        name="assign_once",
     )
-    conflict = quicksum(
-        co.at[e1, e2] * x[e1, b] * x[e2, b]
-        for b in blocks
-        for e1 in exams
-        for e2 in exams
-        if e1 != e2
+    positive_pairs = [
+        (exam_i, exam_j, int(pair_df.at[exam_i, exam_j]))
+        for idx, exam_i in enumerate(exams)
+        for exam_j in exams[idx + 1 :]
+        if int(pair_df.at[exam_i, exam_j]) > 0
+    ]
+    model.setObjective(
+        gp.quicksum(
+            pair_count * x[exam_i, block_id] * x[exam_j, block_id]
+            for block_id in blocks
+            for exam_i, exam_j, pair_count in positive_pairs
+        ),
+        GRB.MINIMIZE,
     )
-    model.setObjective(conflict, GRB.MINIMIZE)
+
+    return model
+
+
+def run_simulation(
+    size: Optional[int],
+    seed: int = DEFAULT_SEED,
+    inputs_dir: Path = INPUTS_DIR,
+    block_count: int = DEFAULT_BLOCKS,
+    optimize: bool = False,
+    stats_path: Optional[Path] = None,
+    time_limit: Optional[float] = None,
+    threads: Optional[int] = None,
+):
+    pair_df, resolved_inputs_dir = prepare_block_assignment_data(
+        size=size,
+        seed=seed,
+        inputs_dir=inputs_dir,
+    )
+    model = build_block_assignment_model(pair_df, block_count=block_count)
+    if time_limit is not None:
+        if time_limit <= 0:
+            raise ValueError("time_limit must be positive when provided.")
+        model.setParam("TimeLimit", float(time_limit))
+    if threads is not None:
+        if threads <= 0:
+            raise ValueError("threads must be positive when provided.")
+        model.setParam("Threads", int(threads))
     if optimize:
         model.optimize()
 
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUTPUTS_DIR / f"blockassign_n{size}_seed{seed}.lp"
+    effective_size = int(size) if size is not None else len(pair_df.index)
+    out_path = OUTPUTS_DIR / f"blockassign_n{effective_size}_seed{seed}.lp"
     model.write(str(out_path))
-    print(f"Done. LP ⇒ {out_path}, stats: {stats}")
+    print(f"Input bundle    => {resolved_inputs_dir}")
+    print(f"Exam count      => {len(pair_df.index)}")
+    print(f"LP model        => {out_path}")
 
-    # Record model statistics (variable/constraint counts)
     try:
         model.update()
         total_vars = int(model.NumVars)
         bin_vars = int(model.NumBinVars)
-        # Some Gurobi versions include binary vars in NumIntVars — subtract them
         gen_int_vars = max(int(model.NumIntVars) - bin_vars, 0)
         cont_vars = max(total_vars - bin_vars - gen_int_vars, 0)
         mip_stats = {
             "generator": "block_assign",
-            "size": int(size) if size is not None else None,
-            "seed": int(seed) if seed is not None else None,
+            "size": effective_size,
+            "seed": int(seed),
             "var_bin": bin_vars,
             "var_int": gen_int_vars,
             "var_cont": cont_vars,
             "constraints": int(model.NumConstrs),
         }
-        stats_path = OUTPUTS_DIR / "stats.csv"
-        header = not stats_path.exists()
-        pd.DataFrame([mip_stats]).to_csv(stats_path, mode="a", header=header, index=False)
-        print(f"Model stats ⇒ {mip_stats}")
-    except Exception as e:
-        print(f"Warning: unable to record model stats: {e}")
+        resolved_stats_path = stats_path if stats_path is not None else OUTPUTS_DIR / "stats.csv"
+        resolved_stats_path.parent.mkdir(parents=True, exist_ok=True)
+        header = not resolved_stats_path.exists()
+        pd.DataFrame([mip_stats]).to_csv(
+            resolved_stats_path,
+            mode="a",
+            header=header,
+            index=False,
+        )
+        print(f"Model stats     => {mip_stats}")
+        print(f"Stats path      => {resolved_stats_path}")
+    except Exception as exc:  # pragma: no cover - defensive stats recording
+        print(f"Warning: unable to record model stats: {exc}")
 
 
 def main():
     parser = argparse.ArgumentParser(__doc__)
-    parser.add_argument("--size", type=int, help="Number of courses to schedule")
-    parser.add_argument("--seed", type=int, default=3)
+    parser.add_argument("--size", type=int, help="Use only exams 1..N from the selected input bundle")
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument(
+        "--inputs-dir",
+        type=Path,
+        default=INPUTS_DIR,
+        help="Input bundle directory; synthetic caches are derived from this bundle when needed",
+    )
+    parser.add_argument(
+        "--stats-path",
+        type=Path,
+        help="Optional CSV path for model stats; defaults to block_assign/outputs/stats.csv",
+    )
+    parser.add_argument(
+        "--time-limit",
+        type=float,
+        help="Optional Gurobi time limit in seconds",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        help="Optional Gurobi thread limit",
+    )
     parser.add_argument("--optimize", action="store_true", help="Run optimizer; default is save-only")
     args = parser.parse_args()
-    run_simulation(args.size, seed=args.seed, optimize=args.optimize)
+    run_simulation(
+        args.size,
+        seed=args.seed,
+        inputs_dir=args.inputs_dir,
+        optimize=args.optimize,
+        stats_path=args.stats_path,
+        time_limit=args.time_limit,
+        threads=args.threads,
+    )
 
 
 if __name__ == "__main__":
     main()
-
-

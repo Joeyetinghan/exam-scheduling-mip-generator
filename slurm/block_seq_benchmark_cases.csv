@@ -1,0 +1,9 @@
+size,num_blocks,num_slots,category
+100,8,8,easy
+150,10,10,easy
+200,12,12,medium
+250,14,14,medium
+300,16,16,hard
+350,18,18,hard
+450,20,20,very_hard
+550,22,22,very_hard
