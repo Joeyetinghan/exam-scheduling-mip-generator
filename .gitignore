@@ -23,3 +23,5 @@ logs/*
 !logs/benchmarks/
 logs/benchmarks/*
 !logs/benchmarks/.gitkeep
+
+slurm/

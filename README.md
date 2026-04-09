@@ -180,7 +180,7 @@ This writes:
 
 ## Benchmark Config
 
-The benchmark scripts in `slurm/` use:
+The benchmark runs use:
 
 - 1 Gurobi thread
 - `--time-limit 3600`
@@ -193,7 +193,6 @@ The benchmark scripts in `slurm/` use:
 block_assign/
 block_seq/
 inputs/
-slurm/
 synthetic_dataset.py
 environment.yml
 ```
