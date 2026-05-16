@@ -196,3 +196,7 @@ inputs/
 synthetic_dataset.py
 environment.yml
 ```
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
